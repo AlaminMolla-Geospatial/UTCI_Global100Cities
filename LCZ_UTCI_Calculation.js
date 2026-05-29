@@ -13,9 +13,9 @@
 // ============================================================
 
 
-// ──────────────────────────────────────────────────────────────
+
 //  SEASON CONFIGURATION  — edit only this block
-// ──────────────────────────────────────────────────────────────
+
 
 var SEASON_MODE  = 'SAME';  // 'DJF'  = Dec 2017 + Jan 2018 + Feb 2018
                              // 'SAME' = selected months within 2018
@@ -37,9 +37,8 @@ var IS_DJF  = (SEASON_MODE === 'DJF');
 var NODATA  = -999;   // sentinel for ALL missing / absent values
 
 
-// ============================================================
-//  1.  CITY BOUNDARY
-// ============================================================
+//    CITY BOUNDARY
+
 
 var cityBoundary = ee.FeatureCollection(
   "projects/ee-alaminswifl/assets/Yangon"
@@ -48,10 +47,10 @@ var cityGeom  = cityBoundary.geometry();
 var CITY_NAME = 'Yangon';
 
 
-// ============================================================
-//  2.  UTCI COLLECTION  (monthly mean, °C equivalent)
+
+//   UTCI COLLECTION  (monthly mean, °C equivalent)
 //      Load 2017–2018 to cover DJF (Dec 2017) and all 2018 seasons
-// ============================================================
+
 
 var utci = ee.ImageCollection("projects/sat-io/open-datasets/gloutci-m")
   .filterDate('2017-01-01', '2018-12-31')
@@ -64,9 +63,9 @@ var utci = ee.ImageCollection("projects/sat-io/open-datasets/gloutci-m")
   });
 
 
-// ============================================================
-//  3.  SEASONAL UTCI IMAGE  (single mean composite)
-// ============================================================
+
+//   SEASONAL UTCI IMAGE  (single mean composite)
+
 
 var seasonalUTCI = (function() {
   if (IS_DJF) {
@@ -89,9 +88,8 @@ var seasonalUTCI = (function() {
 })();
 
 
-// ============================================================
-//  4.  LCZ  —  static map, 100 m, band: LCZ_Filter
-// ============================================================
+//   LCZ  —  static map, 100 m, band: LCZ_Filter
+
 
 // IMPORTANT: The LCZ dataset is a tiled ImageCollection.
 // .first() returns only ONE tile (typically Europe) and will
@@ -133,21 +131,19 @@ var LCZ_CLASSES = [
 ];
 
 
-// ============================================================
-//  5.  PIXEL AREA helper (km²)
-// ============================================================
+
+//   PIXEL AREA helper (km²)
+
 
 var pixelArea_km2 = ee.Image.pixelArea().divide(1e6);
 
 
-// ============================================================
-//  6.  RESAMPLE LCZ MASKS: 100 m → 1 km  (fractional coverage)
-//
+//   RESAMPLE LCZ MASKS: 100 m → 1 km  (fractional coverage)
 //  Bilinear resampling of each binary mask yields a value 0–1
 //  representing the fraction of the 1-km cell covered by that
 //  class. Used as spatial weight in the UTCI mean calculation.
 //  Area is always measured at native 100 m (no resampling).
-// ============================================================
+
 
 function resampleMaskTo1km(binaryMask) {
   return binaryMask
@@ -161,9 +157,9 @@ var resampledMasks = LCZ_CLASSES.map(function(cls) {
 });
 
 
-// ============================================================
-//  7.  TOTAL CITY AREA  (km², native 100 m, valid LCZ only)
-// ============================================================
+
+//    TOTAL CITY AREA  (km², native 100 m, valid LCZ only)
+
 
 var validLCZMask = compactMask
   .or(openMask).or(treesMask).or(bushMask)
@@ -187,11 +183,11 @@ var totalCityArea_km2 = ee.Number(
 );
 
 
-// ============================================================
-//  8.  HELPER — safe number extraction from a Dictionary
+
+//   HELPER — safe number extraction from a Dictionary
 //      Returns NODATA (-999) if the key is null/absent,
 //      guaranteeing no blank cells in the output CSV.
-// ============================================================
+
 
 function safeGet(dict, key) {
   var val = dict.get(key);
@@ -201,11 +197,11 @@ function safeGet(dict, key) {
 }
 
 
-// ============================================================
-//  9.  PER-CLASS STATISTICS
-// ============================================================
 
-// ── 9a. Area (km²) at native 100-m resolution ───────────────
+//  PER-CLASS STATISTICS
+
+
+//  Area (km²) at native 100-m resolution ───────────────
 function classArea_km2(binaryMask100m) {
   var dict = pixelArea_km2
     .updateMask(binaryMask100m.eq(1))
@@ -218,7 +214,7 @@ function classArea_km2(binaryMask100m) {
   return safeGet(dict, 'area');
 }
 
-// ── 9b. Area-weighted mean UTCI at 1-km resolution ──────────
+//  Area-weighted mean UTCI at 1-km resolution ──────────
 //    Weighted mean = Σ(utci × fraction) / Σ(fraction)
 //    where fraction = resampled LCZ mask value [0–1]
 function classMeanUTCI(resampledFracMask, utciImg) {
@@ -257,7 +253,7 @@ function classMeanUTCI(resampledFracMask, utciImg) {
   );
 }
 
-// ── 9c. Proportion (%) of total valid LCZ area ──────────────
+//  Proportion (%) of total valid LCZ area ──────────────
 //    Propagates -999 if area is -999 or total city area is -999/0
 function classProp(area_km2) {
   return ee.Number(
@@ -273,9 +269,9 @@ function classProp(area_km2) {
 }
 
 
-// ============================================================
-//  10.  ASSEMBLE OUTPUT FEATURE  (single row)
-// ============================================================
+
+//    ASSEMBLE OUTPUT FEATURE  (single row)
+
 
 var featureProps = {
   city:        CITY_NAME,
@@ -342,9 +338,9 @@ featureProps['city_utci_weighted_nowater'] = ee.Number(
 var result = ee.FeatureCollection([ee.Feature(null, featureProps)]);
 
 
-// ============================================================
-//  11.  CONSOLE PREVIEW
-// ============================================================
+
+//    CONSOLE PREVIEW
+
 
 print('=== LCZ × UTCI  |  ' + CITY_NAME + ' ===');
 print('Season  : ' + SEASON_LABEL + '  (' + SEASON_MODE + ')');
@@ -360,11 +356,11 @@ print('');
 print('Result:', result);
 
 
-// ============================================================
-//  12.  EXPORT TO GOOGLE DRIVE
+
+//    EXPORT TO GOOGLE DRIVE
 //
 //  Output CSV — ONE row per city, columns:
-//  ─────────────────────────────────────────────────────────
+
 //  city | season | utci_year | utci_period | total_area_km2
 //  city_utci_weighted_nowater  (water excluded from weighting)
 //  [for each of 6 LCZ classes]:
@@ -373,7 +369,7 @@ print('Result:', result);
 //    <class>_utci_mean  -- area-weighted mean UTCI (degC); water_utci_mean
 //                          is reported but excluded from city_utci_weighted_nowater
 //  All missing / absent values are written as -999
-// ============================================================
+
 
 Export.table.toDrive({
   collection:     result,
